@@ -23,16 +23,17 @@ for documentation of the original extension.
 
 Original code Copyright 2009 [Waylan Limberg](http://achinghead.com)
 SpanTables changes Copyright 2016 [Maurice van der Pot](griffon26@kfk4ever.com)
+used AI to update to support markdown 3.0+ by [Nathaniel Madura](shogunjp@gmail.com)
 
 License: [BSD](http://www.opensource.org/licenses/bsd-license.php)
 
 """
 
+
 from __future__ import unicode_literals
 from markdown.blockprocessors import BlockProcessor
 from markdown.extensions import Extension
-from markdown.inlinepatterns import BacktickPattern, BACKTICK_RE
-from markdown.util import etree
+import xml.etree.ElementTree as etree
 
 
 class SpanTableProcessor(BlockProcessor):
@@ -187,37 +188,11 @@ class SpanTableProcessor(BlockProcessor):
 
     def _split(self, row, marker):
         """ split a row of text with some code into a list of cells. """
-        if self._row_has_unpaired_backticks(row):
-            # fallback on old behaviour
-            return row.split(marker)
-        # modify the backtick pattern to only match at the beginning of the search string
-        backtick_pattern = BacktickPattern('^' + BACKTICK_RE)
-        elements = []
-        current = ''
-        i = 0
-        while i < len(row):
-            letter = row[i]
-            if letter == marker:
-                elements.append(current)
-                current = ''
-            else:
-                match = backtick_pattern.getCompiledRegExp().match(row[i:])
-                if not match:
-                    current += letter
-                else:
-                    groups = match.groups()
-                    delim = groups[1]  # the code block delimeter (ie 1 or more backticks)
-                    row_contents = groups[2]  # the text contained inside the code block
-                    i += match.start(4) - 1  # jump pointer to the beginning of the rest of the text (group #4)
-                    element = delim + row_contents + delim  # reinstert backticks
-                    current += element
-            i += 1
-        elements.append(current)
-        return elements
+        return row.split(marker)
 
     def _row_has_unpaired_backticks(self, row):
         count_total_backtick = row.count('`')
-        count_escaped_backtick = row.count('\`')
+        count_escaped_backtick = row.count('\\`')
         count_backtick = count_total_backtick - count_escaped_backtick
         # odd number of backticks,
         # we won't be able to build correct code blocks
@@ -227,11 +202,15 @@ class SpanTableProcessor(BlockProcessor):
 class TableExtension(Extension):
     """ Add tables to Markdown. """
 
-    def extendMarkdown(self, md, md_globals):
+    def extendMarkdown(self, md):
         """ Add an instance of SpanTableProcessor to BlockParser. """
-        md.parser.blockprocessors.add('spantable',
-                                      SpanTableProcessor(md.parser),
-                                      '_begin')
+        if '|' not in md.ESCAPED_CHARS:
+            md.ESCAPED_CHARS.append('|')
+        md.parser.blockprocessors.register(
+            SpanTableProcessor(md.parser),
+            'spantable',
+            76,
+        )
 
 
 def makeExtension(*args, **kwargs):

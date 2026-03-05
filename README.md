@@ -1,8 +1,14 @@
 # mdx_spantables
+
 Extension for python-markdown allowing cells in tables to span multiple rows or columns
 
 This is a slightly modified version of the tables extension that comes with
 [python-markdown](https://github.com/Python-Markdown/markdown).
+
+## Requirements
+
+- Markdown>=3.10.2
+- pymdown-extensions>=10.0
 
 To span cells across multiple columns make sure the cells end with multiple
 consecutive vertical bars. To span cells across rows fill the cell on the last
@@ -62,5 +68,3 @@ Row spanning also only includes cells that span the same set of columns.
     | ----------- | ---------- |
     | span 2 columns and rows ||
     |_                        ||
-
-

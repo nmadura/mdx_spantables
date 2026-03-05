@@ -16,7 +16,7 @@ License: [BSD](http://www.opensource.org/licenses/bsd-license.php)
 
 import unittest
 
-from markdown.util import etree
+import xml.etree.ElementTree as etree
 
 import mdx_spantables
 
@@ -28,6 +28,7 @@ class FakeMarkdown():
 class FakeParser():
     def __init__(self):
         self.markdown = FakeMarkdown()
+        self.md = self.markdown
 
 
 class TestSpanTableProcessor(unittest.TestCase):
