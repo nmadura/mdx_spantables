@@ -259,4 +259,51 @@ class TestSpanTableProcessor(unittest.TestCase):
         )
         self.assertMultiLineEqual(actual, expected)
 
+    def test_run_table_with_alignment_and_separator_padding(self):
+        parent = etree.Element('parent')
+        self.proc.run(parent, [
+            '| head1 | head2 |\n'
+            '| :----- | -----: |\n'
+            '| a | b |'
+        ])
+
+        table = list(parent)[0]
+        thead = table.find('thead')
+        tbody = table.find('tbody')
+
+        header_row = thead.findall('tr')[0]
+        body_row = tbody.findall('tr')[0]
+
+        self.assertEqual(header_row.findall('th')[0].get('align'), 'left')
+        self.assertEqual(header_row.findall('th')[1].get('align'), 'right')
+        self.assertEqual(body_row.findall('td')[0].get('align'), 'left')
+        self.assertEqual(body_row.findall('td')[1].get('align'), 'right')
+
+    def test_run_table_with_colspan_header_mixed_alignment_centers_cell(self):
+        parent = etree.Element('parent')
+        self.proc.run(parent, [
+            '| span 2 hdr rows | span 2 hdr cols   ||\n'
+            '|_                | subhead | subhead2  |\n'
+            '| --------------- |:------- | --------:|\n'
+            '| span 2 rows     |   2     |   1      |\n'
+            '|_                |   3     |   4      |'
+        ])
+
+        table = list(parent)[0]
+        thead = table.find('thead')
+
+        first_header_row = thead.findall('tr')[0]
+        second_header_row = thead.findall('tr')[1]
+
+        top_left = first_header_row.findall('th')[0]
+        top_span = first_header_row.findall('th')[1]
+        lower_left = second_header_row.findall('th')[0]
+        lower_right = second_header_row.findall('th')[1]
+
+        self.assertEqual(top_left.get('rowspan'), '2')
+        self.assertEqual(top_span.get('colspan'), '2')
+        self.assertEqual(top_span.get('align'), 'center')
+        self.assertEqual(lower_left.get('align'), 'left')
+        self.assertEqual(lower_right.get('align'), 'right')
+
 

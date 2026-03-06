@@ -68,3 +68,19 @@ Row spanning also only includes cells that span the same set of columns.
     | ----------- | ---------- |
     | span 2 columns and rows ||
     |_                        ||
+
+6 Mar 2026: Added the ability to have multiple header rows
+
+    | span 2 hdr rows | span 2 hdr cols   ||
+    |_                | subhead | subhead  |
+    | --------------- | ------- | -------- |
+    | span 2 rows     |   2     |   1      |
+    |_                |   3     |   4      |
+
+Added support for setting column alignment using the typical ':' :
+
+    |  centered span  | span 2 hdr cols   ||
+    |_                | subhead | subhead  |
+    |:---------------:|:------- | --------:|
+    |  centered span  | LH      |       RH |
+    |_                | LH      |       RH |

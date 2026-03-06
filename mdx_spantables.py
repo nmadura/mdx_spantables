@@ -154,6 +154,7 @@ class SpanTableProcessor(BlockProcessor):
         # Get alignment of columns
         align = []
         for c in self._split_row(separator, border):
+            c = c.strip()
             if c.startswith(':') and c.endswith(':'):
                 align.append('center')
             elif c.startswith(':'):
@@ -176,6 +177,17 @@ class SpanTableProcessor(BlockProcessor):
 
         self.apply_rowspans(tbody)
 
+    def _apply_cell_alignment(self, cell, alignments):
+        non_empty_alignments = [a for a in alignments if a]
+        if not non_empty_alignments:
+            return
+
+        unique_alignments = set(non_empty_alignments)
+        if len(unique_alignments) == 1:
+            cell.set('align', non_empty_alignments[0])
+        else:
+            cell.set('align', 'center')
+
     def _build_row(self, row, parent, align, border):
         """ Given a row of text, build table cells. """
         tr = etree.SubElement(parent, 'tr')
@@ -184,6 +196,7 @@ class SpanTableProcessor(BlockProcessor):
             tag = 'th'
         cells = self._split_row(row, border)
         c = None
+        c_alignments = []
         # We use align here rather than cells to ensure every row
         # contains the same number of columns.
         for i, a in enumerate(align):
@@ -203,6 +216,8 @@ class SpanTableProcessor(BlockProcessor):
                     colspan_str = c.get('colspan')
                     colspan = int(colspan_str) if colspan_str else 1
                     c.set('colspan', str(colspan + 1))
+                    c_alignments.append(a)
+                    self._apply_cell_alignment(c, c_alignments)
                 else:
                     # if this is the first cell, then fall back to creating an empty cell
                     text = ''
@@ -210,9 +225,8 @@ class SpanTableProcessor(BlockProcessor):
             if text != None:
                 c = etree.SubElement(tr, tag)
                 c.text = text.strip()
-
-            if a:
-                c.set('align', a)
+                c_alignments = [a]
+                self._apply_cell_alignment(c, c_alignments)
 
     def _split_row(self, row, border):
         """ split a row of text into list of cells. """
