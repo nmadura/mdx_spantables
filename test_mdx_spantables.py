@@ -79,6 +79,11 @@ class TestSpanTableProcessor(unittest.TestCase):
         self.assertTrue(self.proc.test(None, '| bla | nogwat |\n'
                                              '|-----|--------|\n'))
 
+    def test_test_with_multiple_header_rows(self):
+        self.assertTrue(self.proc.test(None, '| Sensing | Warning and interventions | 2026-2027 ||\n'
+                                             '|_ |_ | All passenger seats | Rear seats only |\n'
+                                             '| --- | --- | --- | --- |\n'))
+
 
     def test_run_table_without_col_or_rowspan(self):
         parent = etree.Element('parent')
@@ -91,6 +96,22 @@ class TestSpanTableProcessor(unittest.TestCase):
         expected = (
             '1x1 1x1\n'
             '1x1 1x1\n'
+        )
+        self.assertMultiLineEqual(actual, expected)
+
+    def test_run_table_with_multiple_header_rows(self):
+        parent = etree.Element('parent')
+        self.proc.run(parent, [
+            '| Sensing | Warning and interventions | 2026-2027 ||\n'
+            '|_ |_ | All passenger seats | Rear seats only |\n'
+            '| --- | --- | --- | --- |\n'
+            '| Indirect Sensing | Initial warning | 2 | 1 |'
+        ])
+        actual = self.element_to_table(parent)
+        expected = (
+            '1x2 1x2 2x1\n'
+            '1x1 1x1\n'
+            '1x1 1x1 1x1 1x1\n'
         )
         self.assertMultiLineEqual(actual, expected)
 

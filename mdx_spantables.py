@@ -34,16 +34,40 @@ from __future__ import unicode_literals
 from markdown.blockprocessors import BlockProcessor
 from markdown.extensions import Extension
 import xml.etree.ElementTree as etree
+import re
 
 
 class SpanTableProcessor(BlockProcessor):
     """ Process Tables. """
 
+    SEPARATOR_RE = re.compile(r'^\s*:?-+:?\s*$')
+
     def test(self, parent, block):
         rows = block.split('\n')
-        return (len(rows) > 1 and '|' in rows[0] and
-                '|' in rows[1] and '-' in rows[1] and
-                rows[1].strip()[0] in ['|', ':', '-'])
+        if len(rows) < 2:
+            return False
+
+        if '|' not in rows[0]:
+            return False
+
+        border = rows[0].strip().startswith('|')
+        separator_index = self._find_separator_index(rows, border)
+        return separator_index > 0
+
+    def _is_separator_cell(self, cell):
+        return bool(self.SEPARATOR_RE.match(cell))
+
+    def _is_separator_row(self, row, border):
+        cells = self._split_row(row.strip(), border)
+        if not cells:
+            return False
+        return all(self._is_separator_cell(c) for c in cells)
+
+    def _find_separator_index(self, rows, border):
+        for index, row in enumerate(rows):
+            if self._is_separator_row(row, border):
+                return index
+        return -1
 
 
     def is_end_of_rowspan(self, td):
@@ -59,7 +83,7 @@ class SpanTableProcessor(BlockProcessor):
             max_rows = len(rows)
             for y, tr in enumerate(rows):
 
-                cols = tr.findall('td')
+                cols = [cell for cell in tr if cell.tag in ('td', 'th')]
 
                 x = 0
                 for td in cols:
@@ -111,16 +135,25 @@ class SpanTableProcessor(BlockProcessor):
     def run(self, parent, blocks):
         """ Parse a table block and build table. """
         block = blocks.pop(0).split('\n')
-        header = block[0].strip()
-        seperator = block[1].strip()
-        rows = [] if len(block) < 3 else block[2:]
+        if not block:
+            return
+
         # Get format type (bordered by pipes or not)
         border = False
-        if header.startswith('|'):
+        if block[0].strip().startswith('|'):
             border = True
+
+        separator_index = self._find_separator_index(block, border)
+        if separator_index < 1:
+            return
+
+        headers = [row.strip() for row in block[:separator_index]]
+        separator = block[separator_index].strip()
+        rows = [] if len(block) <= separator_index + 1 else block[separator_index + 1:]
+
         # Get alignment of columns
         align = []
-        for c in self._split_row(seperator, border):
+        for c in self._split_row(separator, border):
             if c.startswith(':') and c.endswith(':'):
                 align.append('center')
             elif c.startswith(':'):
@@ -132,7 +165,11 @@ class SpanTableProcessor(BlockProcessor):
         # Build table
         table = etree.SubElement(parent, 'table')
         thead = etree.SubElement(table, 'thead')
-        self._build_row(header, thead, align, border)
+        for header in headers:
+            self._build_row(header, thead, align, border)
+
+        self.apply_rowspans(thead)
+
         tbody = etree.SubElement(table, 'tbody')
         for row in rows:
             self._build_row(row.strip(), tbody, align, border)
