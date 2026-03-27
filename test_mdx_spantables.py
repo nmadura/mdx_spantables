@@ -15,8 +15,15 @@ License: [BSD](http://www.opensource.org/licenses/bsd-license.php)
 """
 
 import unittest
+import sys
+from pathlib import Path
 
+import markdown
 import xml.etree.ElementTree as etree
+
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
 
 import mdx_spantables
 
@@ -305,5 +312,47 @@ class TestSpanTableProcessor(unittest.TestCase):
         self.assertEqual(top_span.get('align'), 'center')
         self.assertEqual(lower_left.get('align'), 'left')
         self.assertEqual(lower_right.get('align'), 'right')
+
+
+class TestSpanTableMarkdownIntegration(unittest.TestCase):
+
+    def render(self, text, **config):
+        extension_configs = {}
+        if config:
+            extension_configs['mdx_spantables'] = config
+        return markdown.markdown(
+            text,
+            extensions=['md_in_html', 'mdx_spantables'],
+            extension_configs=extension_configs,
+        )
+
+    def test_lists_in_table_are_disabled_by_default(self):
+        html = self.render(
+            '| head 1 | head 2 |\n'
+            '| :---- | :---- |\n'
+            '| Legs | Driver paragraph\n'
+            '- item 1\n'
+            '- item 2 |'
+        )
+
+        self.assertNotIn('<ul>', html)
+        self.assertEqual(html.count('<tr>'), 4)
+        self.assertIn('- item 1', html)
+
+    def test_lists_in_table_can_be_enabled(self):
+        html = self.render(
+            '| head 1 | head 2 |\n'
+            '| :---- | :---- |\n'
+            '| Legs | **Driver -** Driver paragraph\n'
+            '- item 1\n'
+            '- item 2 |',
+            allow_lists_in_table=True,
+        )
+
+        self.assertIn('<strong>Driver -</strong>', html)
+        self.assertIn('<ul>', html)
+        self.assertIn('<li>item 1</li>', html)
+        self.assertIn('<li>item 2</li>', html)
+        self.assertEqual(html.count('<tr>'), 2)
 
 

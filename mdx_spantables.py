@@ -41,6 +41,19 @@ class SpanTableProcessor(BlockProcessor):
     """ Process Tables. """
 
     SEPARATOR_RE = re.compile(r'^\s*:?-+:?\s*$')
+    LIST_ITEM_RE = re.compile(r'^\s*(?:[-+*]|\d+[.)])\s+')
+
+    def __init__(self, parser, config=None):
+        self.config = config or {}
+        self.allow_lists_in_table = self._coerce_bool(
+            self.config.get('allow_lists_in_table', False)
+        )
+        super().__init__(parser)
+
+    def _coerce_bool(self, value):
+        if isinstance(value, str):
+            return value.strip().lower() in ('1', 'true', 'yes', 'on')
+        return bool(value)
 
     def test(self, parent, block):
         rows = block.split('\n')
@@ -72,8 +85,80 @@ class SpanTableProcessor(BlockProcessor):
 
     def is_end_of_rowspan(self, td):
         return ((td != None) and
+                (len(td) == 0) and
+                bool(td.text) and
                 (td.text.startswith('_') or td.text.endswith('_')) and
                 (td.text.strip('_ ') == ''))
+
+    def _cell_has_content(self, td):
+        return bool((td.text and td.text.strip()) or len(td) > 0)
+
+    def _is_table_row_candidate(self, row, border):
+        stripped = row.strip()
+        if not stripped or '|' not in stripped:
+            return False
+        return len(self._split_row(stripped, border)) > 1
+
+    def _is_list_continuation_line(self, row):
+        return bool(self.LIST_ITEM_RE.match(row))
+
+    def _append_continuation_to_cells(self, cells, continuation_text, *, starts_list, border):
+        if not cells:
+            return
+
+        cell_index = len(cells) - 1
+        while cell_index > 0 and not str(cells[cell_index] or '').strip():
+            cell_index -= 1
+
+        existing = str(cells[cell_index] or '').rstrip()
+        continuation = str(continuation_text or '').rstrip()
+        if border and continuation.endswith('|'):
+            continuation = continuation[:-1].rstrip()
+        if not continuation:
+            return
+
+        if not existing:
+            cells[cell_index] = continuation
+            return
+
+        separator = '\n\n' if starts_list else '\n'
+        cells[cell_index] = existing + separator + continuation
+
+    def _normalize_body_rows(self, rows, border):
+        if not self.allow_lists_in_table:
+            return [row.strip() for row in rows]
+
+        normalized_rows = []
+        list_continuation_active = False
+        for raw_row in rows:
+            stripped_row = raw_row.strip()
+
+            if self._is_table_row_candidate(stripped_row, border):
+                normalized_rows.append(self._split_row(stripped_row, border))
+                list_continuation_active = False
+                continue
+
+            if normalized_rows and (self._is_list_continuation_line(raw_row) or list_continuation_active):
+                self._append_continuation_to_cells(
+                    normalized_rows[-1],
+                    raw_row.rstrip(),
+                    starts_list=(not list_continuation_active),
+                    border=border,
+                )
+                list_continuation_active = True
+                continue
+
+            normalized_rows.append(stripped_row)
+            list_continuation_active = False
+
+        return normalized_rows
+
+    def _render_cell_content(self, cell, text):
+        stripped_text = text.strip()
+        if self.allow_lists_in_table and '\n' in stripped_text:
+            self.parser.parseChunk(cell, stripped_text)
+            return
+        cell.text = stripped_text
 
     def apply_rowspans(self, tbody):
             table_cells = {}
@@ -114,7 +199,7 @@ class SpanTableProcessor(BlockProcessor):
                             current_colspan = colspan
                             possible_cells_in_rowspan = 0
 
-                        if not td.text:
+                        if not self._cell_has_content(td):
                             possible_cells_in_rowspan += 1
 
                         elif self.is_end_of_rowspan(td):
@@ -172,8 +257,8 @@ class SpanTableProcessor(BlockProcessor):
         self.apply_rowspans(thead)
 
         tbody = etree.SubElement(table, 'tbody')
-        for row in rows:
-            self._build_row(row.strip(), tbody, align, border)
+        for row in self._normalize_body_rows(rows, border):
+            self._build_row(row, tbody, align, border)
 
         self.apply_rowspans(tbody)
 
@@ -194,7 +279,10 @@ class SpanTableProcessor(BlockProcessor):
         tag = 'td'
         if parent.tag == 'thead':
             tag = 'th'
-        cells = self._split_row(row, border)
+        if isinstance(row, (list, tuple)):
+            cells = list(row)
+        else:
+            cells = self._split_row(row, border)
         c = None
         c_alignments = []
         # We use align here rather than cells to ensure every row
@@ -224,7 +312,7 @@ class SpanTableProcessor(BlockProcessor):
 
             if text != None:
                 c = etree.SubElement(tr, tag)
-                c.text = text.strip()
+                self._render_cell_content(c, text)
                 c_alignments = [a]
                 self._apply_cell_alignment(c, c_alignments)
 
@@ -253,12 +341,18 @@ class SpanTableProcessor(BlockProcessor):
 class TableExtension(Extension):
     """ Add tables to Markdown. """
 
+    def __init__(self, *args, **kwargs):
+        self.config = {
+            'allow_lists_in_table': [False, 'Allow block list continuation lines inside table cells'],
+        }
+        super().__init__(*args, **kwargs)
+
     def extendMarkdown(self, md):
         """ Add an instance of SpanTableProcessor to BlockParser. """
         if '|' not in md.ESCAPED_CHARS:
             md.ESCAPED_CHARS.append('|')
         md.parser.blockprocessors.register(
-            SpanTableProcessor(md.parser),
+            SpanTableProcessor(md.parser, self.getConfigs()),
             'spantable',
             76,
         )

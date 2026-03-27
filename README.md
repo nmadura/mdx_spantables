@@ -84,3 +84,29 @@ Added support for setting column alignment using the typical ':' :
     |:---------------:|:------- | --------:|
     |  centered span  | LH      |       RH |
     |_                | LH      |       RH |
+
+Optional setting:
+
+- `allow_lists_in_table` (default: `False`) folds list continuation lines into the preceding table cell and parses them as nested block markdown.
+
+Example configuration:
+
+```python
+markdown.markdown(
+    text,
+    extensions=['mdx_spantables'],
+    extension_configs={
+        'mdx_spantables': {
+            'allow_lists_in_table': True,
+        },
+    },
+)
+```
+
+With that option enabled, content like the following stays in a single table cell instead of turning the list items into separate table rows:
+
+    | head 1 | head 2 |
+    | :----- | :----- |
+    | Legs   | Driver paragraph
+    - item 1
+    - item 2 |
