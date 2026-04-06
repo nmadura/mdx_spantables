@@ -205,6 +205,27 @@ class SpanTableProcessor(BlockProcessor):
 
         return None
 
+    def _last_row_allows_block_continuation(self, entries, border):
+        if not border:
+            return False
+
+        for entry in reversed(list(entries or [])):
+            if isinstance(entry, tuple) and len(entry) == 2 and entry[0] == 'block':
+                text = str(entry[1] or '').rstrip()
+                if not text.strip():
+                    continue
+                return not text.endswith('|')
+
+            if isinstance(entry, list):
+                return False
+
+            text = str(entry or '').rstrip()
+            if not text.strip():
+                continue
+            return not text.endswith('|')
+
+        return False
+
     def _collect_body_entries(self, rows, blocks, border, expected_columns=None):
         entries = list(rows or [])
         if not self.allow_blocks_in_table:
@@ -223,6 +244,10 @@ class SpanTableProcessor(BlockProcessor):
                 entries.append(('block', prefix_text))
                 entries.extend(suffix_rows)
                 blocks.pop(0)
+                continue
+
+            if self._last_row_allows_block_continuation(entries, border):
+                entries.append(('block', blocks.pop(0)))
                 continue
 
             if entries and any(

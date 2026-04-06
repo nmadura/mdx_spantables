@@ -432,4 +432,39 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertIn('<th align="left">Front Occupant</th>', html)
         self.assertRegex(html, r'</table>\s*<table>')
 
+    def test_blocks_in_table_can_continue_open_last_cell_across_blank_lines(self):
+        html = self.render(
+            '| Rollover ||\n'
+            '| :--- | :--- |\n'
+            '| Triggering of HPD | The vehicle manufacturer must provide evidence showing that the vehicle can both sense rollover and that the side curtain HPD is deployed as a result. Functionality of rollover triggering shall be demonstrated with a full scale rollover dynamic test which may be selected by the OEM. |\n'
+            '| HPD inflation | During the HPD measurements, after airbag deployment, detailed in [Section 4.1.3](#s:4.1.3), the laboratory will check that the deployed curtain airbag remains inflated and maintains sufficient pressure for at least 6 seconds to provide head impact protection.\n\n'
+            'Where the laboratory check cannot be performed or there are doubts regarding inflation, functionality of rollover countermeasures shall be demonstrated with one of the following: \n\n'
+            '- HPD internal pressure retention of 50% for a minimum of 6 seconds - C-NCAP 2024. Data must include pressure vs time output. \n'
+            '- Compliance with FMVSS 226. |',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 1)
+        self.assertEqual(html.count('<tr>'), 3)
+        self.assertRegex(html, r'<td[^>]*>\s*<p>During the HPD measurements.*?</p>\s*<p>Where the laboratory check cannot be performed',)
+        self.assertIn('<ul>', html)
+        self.assertIn('<li>Compliance with FMVSS 226.</li>', html)
+
+    def test_blocks_in_table_does_not_absorb_paragraph_after_closed_last_cell(self):
+        html = self.render(
+            '| Rollover ||\n'
+            '| :--- | :--- |\n'
+            '| Triggering of HPD | The vehicle manufacturer must provide evidence showing that the vehicle can both sense rollover and that the side curtain HPD is deployed as a result. Functionality of rollover triggering shall be demonstrated with a full scale rollover dynamic test which may be selected by the OEM. |\n'
+            '| HPD inflation | During the HPD measurements, after airbag deployment, detailed in [Section 4.1.3](#s:4.1.3), the laboratory will check that the deployed curtain airbag remains inflated and maintains sufficient pressure for at least 6 seconds to provide head impact protection.\n\n'
+            'Where the laboratory check cannot be performed or there are doubts regarding inflation, functionality of rollover countermeasures shall be demonstrated with one of the following: \n\n'
+            '- HPD internal pressure retention of 50% for a minimum of 6 seconds - C-NCAP 2024. Data must include pressure vs time output. \n'
+            '- Compliance with FMVSS 226. |\n\n'
+            'Both of the above requirements must be met in order to receive rewards for rollover protection, no partial',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 1)
+        self.assertEqual(html.count('<tr>'), 3)
+        self.assertRegex(html, r'</table>\s*<p>Both of the above requirements must be met')
+
 
