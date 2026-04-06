@@ -393,4 +393,43 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertIn('>Green - Occupant interaction limit</td>', html)
         self.assertIn('>Blue - Vehicle centreline</td>', html)
 
+    def test_blocks_in_table_can_render_list_inside_multiline_first_cell(self):
+        html = self.render(
+            '| Criterion || WorldSID 50th ||\n'
+            '|_          || HPL - LPL | Capping |\n'
+            '| :--- | --- | --- | --- |\n'
+            '| HIC~15~ | - | 500 - 700 | 700 |\n'
+            '| A~res~-3ms | g | 72 - 80 | 80 |\n'
+            '| A~res~-3ms \n'
+            '- Direct contact with pole\n'
+            '- O2O Head contact | g | - | 80 |',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 1)
+        self.assertEqual(html.count('<tr>'), 5)
+        self.assertIn('<ul>', html)
+        self.assertIn('<li>Direct contact with pole</li>', html)
+        self.assertIn('<li>O2O Head contact</li>', html)
+
+    def test_blocks_in_table_does_not_merge_following_different_table(self):
+        html = self.render(
+            '| Load case |  |  | Head Excursion | Total points |\n'
+            '| :--- | :--- | --- | --- | --- |\n'
+            '| Far side | Main load cases | AE-MDB | 2.0 | 4 |\n'
+            '|     |_ | Pole | 2.0 |_ |\n'
+            '|     | Robustness | AE-MDB | 2.0 | 4 |\n'
+            '|_    |_          | Pole | 2.0 |_ |\n\n'
+            '| Front Occupant | Head | Total points |\n'
+            '| :--- | --- | --- |\n'
+            '| Occupant to occupant interaction[^1] | 2.00 | 2 |\n\n'
+            '[^1]: Footnote',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 2)
+        self.assertIn('<th align="left">Load case</th>', html)
+        self.assertIn('<th align="left">Front Occupant</th>', html)
+        self.assertRegex(html, r'</table>\s*<table>')
+
 
