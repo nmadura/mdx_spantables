@@ -326,7 +326,7 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
             extension_configs=extension_configs,
         )
 
-    def test_lists_in_table_are_disabled_by_default(self):
+    def test_blocks_in_table_are_disabled_by_default(self):
         html = self.render(
             '| head 1 | head 2 |\n'
             '| :---- | :---- |\n'
@@ -339,14 +339,27 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertEqual(html.count('<tr>'), 4)
         self.assertIn('- item 1', html)
 
-    def test_lists_in_table_can_be_enabled(self):
+    def test_blank_line_continuation_is_not_absorbed_by_default(self):
+        html = self.render(
+            '| Excursion line | Description |\n'
+            '| :--- | :--- |\n'
+            '| Red - Maximum intrusion | This line is marking the maximum post-test intruding point.  \n\n'
+            'Peak intrusion values will be compared. |\n\n'
+            '| Orange - Excursion limit | Struck side seat centreline, pre-test, without intrusion. |',
+        )
+
+        self.assertEqual(html.count('<tr>'), 2)
+        self.assertIn('<p>Peak intrusion values will be compared. |</p>', html)
+        self.assertIn('<p>| Orange - Excursion limit | Struck side seat centreline, pre-test, without intrusion. |</p>', html)
+
+    def test_blocks_in_table_can_be_enabled_for_list_content(self):
         html = self.render(
             '| head 1 | head 2 |\n'
             '| :---- | :---- |\n'
             '| Legs | **Driver -** Driver paragraph\n'
             '- item 1\n'
             '- item 2 |',
-            allow_lists_in_table=True,
+            allow_blocks_in_table=True,
         )
 
         self.assertIn('<strong>Driver -</strong>', html)
@@ -354,5 +367,30 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertIn('<li>item 1</li>', html)
         self.assertIn('<li>item 2</li>', html)
         self.assertEqual(html.count('<tr>'), 2)
+
+    def test_blocks_in_table_can_render_multiple_paragraphs_inside_one_cell(self):
+        html = self.render(
+            '| Excursion line | Description |\n'
+            '| :--- | :--- |\n'
+            '| Red - Maximum intrusion | This line is marking the maximum post-test intruding point of the interior door panel from AE-MDB (60km/h) and 75º pole impacts respectively. The method to determine the maximum deformation is detailed in [CP 004](/documents/translation/61/).  \n\n'
+            'Peak intrusion values will be compared to those observed in the official tests. The OEM shall provide details of the measurement point used for establishing the intrusion lines. Where the red line is further inboard than any of the other excursion lines, those lines will not be marked on the BIW. |\n'
+            '| Orange - Excursion limit | Struck side seat centreline, pre-test, without intrusion. |\n'
+            '| Yellow - Excursion limit | 125mm inboard of the struck side seat centreline. |\n'
+            '| Green - Occupant interaction limit | 250mm inboard from the struck side seat centreline |\n'
+            '| Blue - Vehicle centreline | Y=0 |',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<tr>'), 6)
+        self.assertIn('<thead>', html)
+        self.assertIn('<tbody>', html)
+        self.assertRegex(
+            html,
+            r'<td[^>]*>\s*<p>This line is marking.*?</p>\s*<p>Peak intrusion values will be compared',
+        )
+        self.assertIn('>Orange - Excursion limit</td>', html)
+        self.assertIn('>Yellow - Excursion limit</td>', html)
+        self.assertIn('>Green - Occupant interaction limit</td>', html)
+        self.assertIn('>Blue - Vehicle centreline</td>', html)
 
 

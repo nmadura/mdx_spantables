@@ -45,8 +45,8 @@ class SpanTableProcessor(BlockProcessor):
 
     def __init__(self, parser, config=None):
         self.config = config or {}
-        self.allow_lists_in_table = self._coerce_bool(
-            self.config.get('allow_lists_in_table', False)
+        self.allow_blocks_in_table = self._coerce_bool(
+            self.config.get('allow_blocks_in_table', False)
         )
         super().__init__(parser)
 
@@ -102,7 +102,7 @@ class SpanTableProcessor(BlockProcessor):
     def _is_list_continuation_line(self, row):
         return bool(self.LIST_ITEM_RE.match(row))
 
-    def _append_continuation_to_cells(self, cells, continuation_text, *, starts_list, border):
+    def _append_continuation_to_cells(self, cells, continuation_text, *, starts_list, border, separator=None):
         if not cells:
             return
 
@@ -121,16 +121,96 @@ class SpanTableProcessor(BlockProcessor):
             cells[cell_index] = continuation
             return
 
-        separator = '\n\n' if starts_list else '\n'
-        cells[cell_index] = existing + separator + continuation
+        joiner = separator if separator is not None else ('\n\n' if starts_list else '\n')
+        cells[cell_index] = existing + joiner + continuation
+
+    def _append_block_to_last_row(self, normalized_rows, block_text, *, border):
+        if not normalized_rows:
+            return False
+
+        last_row = normalized_rows[-1]
+        if not isinstance(last_row, list):
+            return False
+
+        continuation = str(block_text or '').strip('\n')
+        if not continuation.strip():
+            return False
+
+        self._append_continuation_to_cells(
+            last_row,
+            continuation,
+            starts_list=self._is_list_continuation_line(continuation),
+            border=border,
+            separator='\n\n',
+        )
+        return True
+
+    def _block_is_table_rows(self, block_text, border):
+        rows = [row.strip() for row in str(block_text or '').split('\n') if row.strip()]
+        if not rows:
+            return False
+        return all(self._is_table_row_candidate(row, border) for row in rows)
+
+    def _split_mixed_block(self, block_text, border):
+        lines = str(block_text or '').split('\n')
+        non_empty_indexes = [index for index, line in enumerate(lines) if line.strip()]
+        if not non_empty_indexes:
+            return None
+
+        for start_index in non_empty_indexes:
+            suffix_lines = [line for line in lines[start_index:] if line.strip()]
+            if not suffix_lines:
+                continue
+            if not all(self._is_table_row_candidate(line, border) for line in suffix_lines):
+                continue
+
+            prefix = '\n'.join(lines[:start_index]).strip('\n')
+            if not prefix.strip():
+                return None
+            return prefix, lines[start_index:]
+
+        return None
+
+    def _collect_body_entries(self, rows, blocks, border):
+        entries = list(rows or [])
+        if not self.allow_blocks_in_table:
+            return entries
+
+        while blocks:
+            next_block = str(blocks[0] or '')
+            if self._block_is_table_rows(next_block, border):
+                entries.extend(next_block.split('\n'))
+                blocks.pop(0)
+                continue
+
+            mixed_block = self._split_mixed_block(next_block, border)
+            if mixed_block is not None:
+                prefix_text, suffix_rows = mixed_block
+                entries.append(('block', prefix_text))
+                entries.extend(suffix_rows)
+                blocks.pop(0)
+                continue
+
+            if entries and any(self._block_is_table_rows(candidate, border) for candidate in blocks[1:]):
+                entries.append(('block', blocks.pop(0)))
+                continue
+
+            break
+
+        return entries
 
     def _normalize_body_rows(self, rows, border):
-        if not self.allow_lists_in_table:
+        if not self.allow_blocks_in_table:
             return [row.strip() for row in rows]
 
         normalized_rows = []
         list_continuation_active = False
         for raw_row in rows:
+            if isinstance(raw_row, tuple) and len(raw_row) == 2 and raw_row[0] == 'block':
+                self._append_block_to_last_row(normalized_rows, raw_row[1], border=border)
+                list_continuation_active = False
+                continue
+
             stripped_row = raw_row.strip()
 
             if self._is_table_row_candidate(stripped_row, border):
@@ -155,7 +235,7 @@ class SpanTableProcessor(BlockProcessor):
 
     def _render_cell_content(self, cell, text):
         stripped_text = text.strip()
-        if self.allow_lists_in_table and '\n' in stripped_text:
+        if self.allow_blocks_in_table and '\n' in stripped_text:
             self.parser.parseChunk(cell, stripped_text)
             return
         cell.text = stripped_text
@@ -235,6 +315,7 @@ class SpanTableProcessor(BlockProcessor):
         headers = [row.strip() for row in block[:separator_index]]
         separator = block[separator_index].strip()
         rows = [] if len(block) <= separator_index + 1 else block[separator_index + 1:]
+        rows = self._collect_body_entries(rows, blocks, border)
 
         # Get alignment of columns
         align = []
@@ -343,7 +424,7 @@ class TableExtension(Extension):
 
     def __init__(self, *args, **kwargs):
         self.config = {
-            'allow_lists_in_table': [False, 'Allow block list continuation lines inside table cells'],
+            'allow_blocks_in_table': [False, 'Allow block continuation content inside table cells'],
         }
         super().__init__(*args, **kwargs)
 
