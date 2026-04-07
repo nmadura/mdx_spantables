@@ -467,4 +467,27 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertEqual(html.count('<tr>'), 3)
         self.assertRegex(html, r'</table>\s*<p>Both of the above requirements must be met')
 
+    def test_blocks_in_table_does_not_merge_following_full_table_block(self):
+        html = self.render(
+            '| Front Occupant | Modifiers | Criterion | Modifier score |\n'
+            '| :--- | :--- | :--- | --- |\n'
+            '| Head & neck | Direct contact with pole | Inspection | capping |\n'
+            '|     | DAMAGE | DAMAGE >= 0.47 | monitoring |\n'
+            '|_    | Incorrect airbag deployment | Inspection | -20% |\n'
+            '| Chest | Shoulder load | >= 3.0kN | -100% |\n'
+            '|     | Viscous Criterion | >= 1.0m/s | -100% |\n'
+            '|_    | Incorrect airbag deployment | Inspection | -20% | | Abdomen | Viscous Criterion | >= 1.0m/s | -100% |\n'
+            '|_    | Incorrect airbag deployment | Inspection | -20% | | Pelvis | Incorrect airbag deployment | Inspection | -20% |\n\n'
+            '| Rear child occupants | Modifiers | Criterion | Modifier score |\n'
+            '| --- | --- | --- | --- |\n'
+            '| Head | Restraint | Inspection | -100% |\n'
+            '| Q dummy test score | CRS to vehicle attachment | Inspection | -50% |',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 2)
+        self.assertIn('<th align="left">Front Occupant</th>', html)
+        self.assertIn('<th>Rear child occupants</th>', html)
+        self.assertRegex(html, r'</table>\s*<table>')
+
 

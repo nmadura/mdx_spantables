@@ -182,6 +182,13 @@ class SpanTableProcessor(BlockProcessor):
             return False
         return all(self._is_table_row_candidate(row, border, expected_columns=expected_columns) for row in rows)
 
+    def _block_starts_new_table(self, block_text, border):
+        rows = [row for row in str(block_text or '').split('\n') if row.strip()]
+        if len(rows) < 2:
+            return False
+        separator_index = self._find_separator_index(rows, border)
+        return separator_index > 0
+
     def _split_mixed_block(self, block_text, border, expected_columns=None):
         lines = str(block_text or '').split('\n')
         non_empty_indexes = [index for index, line in enumerate(lines) if line.strip()]
@@ -233,6 +240,9 @@ class SpanTableProcessor(BlockProcessor):
 
         while blocks:
             next_block = str(blocks[0] or '')
+            if self._block_starts_new_table(next_block, border):
+                break
+
             if self._block_is_table_rows(next_block, border, expected_columns=expected_columns):
                 entries.extend(next_block.split('\n'))
                 blocks.pop(0)
