@@ -467,6 +467,26 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertEqual(html.count('<tr>'), 3)
         self.assertRegex(html, r'</table>\s*<p>Both of the above requirements must be met')
 
+    def test_blocks_in_table_preserves_following_rows_when_last_row_is_incomplete(self):
+        html = self.render(
+            '| Adjustment | Required setting - Hybrid III |\n'
+            '| :--- | :--- |\n'
+            '| Fore/aft | **Driver** - MDP permissible between fully forward and 25% of travel, measured in lowest position otherwise fully forwards \n\n'
+            '**Front passenger** - Mid position between fully forward and 95th otherwise first notch rearwards, measured in lowest position |\n'
+            '| Front seat cushion tilt | MDP permissible up to mid, otherwise mid. |\n'
+            '| Front seat height | MDP permissible between fully upward and 75% travel downwards, when in 5th percentile fore/aft position, otherwise mid. | \n'
+            '| Front seat torso angle | MDP otherwise 25° torso angle |\n'
+            '| Front seat lumbar support | Fully retracted | \n'
+            '| Front seat cushion length  Fully retracted Front head restraint Fore/aft or tilt - MDP, otherwise mid position. Height - Lowest position. Front seat belt anchorage Lowest',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 1)
+        self.assertEqual(html.count('<tr>'), 7)
+        self.assertIn('>Front seat cushion tilt</td>', html)
+        self.assertIn('>Front seat lumbar support</td>', html)
+        self.assertIn('>Front seat cushion length  Fully retracted Front head restraint Fore/aft or tilt - MDP, otherwise mid position. Height - Lowest position. Front seat belt anchorage Lowest</td>', html)
+
     def test_blocks_in_table_does_not_merge_following_full_table_block(self):
         html = self.render(
             '| Front Occupant | Modifiers | Criterion | Modifier score |\n'

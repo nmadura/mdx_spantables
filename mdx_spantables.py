@@ -196,19 +196,37 @@ class SpanTableProcessor(BlockProcessor):
             return None
 
         for start_index in non_empty_indexes:
-            suffix_lines = [line for line in lines[start_index:] if line.strip()]
-            if not suffix_lines:
-                continue
-            if not all(
-                self._is_table_row_candidate(line, border, expected_columns=expected_columns)
-                for line in suffix_lines
-            ):
+            valid_end_index = start_index
+            found_table_rows = False
+
+            for index in range(start_index, len(lines)):
+                line = lines[index]
+                if not line.strip():
+                    if found_table_rows:
+                        break
+                    continue
+
+                if self._is_table_row_candidate(line, border, expected_columns=expected_columns):
+                    valid_end_index = index + 1
+                    found_table_rows = True
+                    continue
+
+                if found_table_rows:
+                    break
+
+                valid_end_index = start_index
+                break
+
+            if not found_table_rows:
                 continue
 
             prefix = '\n'.join(lines[:start_index]).strip('\n')
             if not prefix.strip():
                 return None
-            return prefix, lines[start_index:]
+
+            row_lines = lines[start_index:valid_end_index]
+            suffix_lines = lines[valid_end_index:]
+            return prefix, row_lines, suffix_lines
 
         return None
 
@@ -250,9 +268,10 @@ class SpanTableProcessor(BlockProcessor):
 
             mixed_block = self._split_mixed_block(next_block, border, expected_columns=expected_columns)
             if mixed_block is not None:
-                prefix_text, suffix_rows = mixed_block
+                prefix_text, table_rows, trailing_lines = mixed_block
                 entries.append(('block', prefix_text))
-                entries.extend(suffix_rows)
+                entries.extend(table_rows)
+                entries.extend(trailing_lines)
                 blocks.pop(0)
                 continue
 
