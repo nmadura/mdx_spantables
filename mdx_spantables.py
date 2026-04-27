@@ -48,6 +48,13 @@ class SpanTableProcessor(BlockProcessor):
         self.allow_blocks_in_table = self._coerce_bool(
             self.config.get('allow_blocks_in_table', False)
         )
+        self.parse_error_marker = self._coerce_bool(
+            self.config.get('parse_error_marker', False)
+        )
+        self.parse_error_marker_text = str(
+            self.config.get('parse_error_marker_text', 'TABLE ERROR') or 'TABLE ERROR'
+        )
+        self._parse_errors = []
         super().__init__(parser)
 
     def _coerce_bool(self, value):
@@ -98,11 +105,16 @@ class SpanTableProcessor(BlockProcessor):
         if not stripped or '|' not in stripped:
             return False
         cells = self._split_row(stripped, border)
-        if len(cells) <= 1:
-            return False
-        if expected_columns is not None and len(cells) != expected_columns:
-            return False
-        return True
+        if expected_columns is not None:
+            if (
+                self.allow_blocks_in_table
+                and expected_columns == 1
+                and border
+                and not stripped.endswith('|')
+            ):
+                return False
+            return len(cells) == expected_columns
+        return len(cells) > 1
 
     def _is_list_continuation_line(self, row):
         return bool(self.LIST_ITEM_RE.match(row))
@@ -175,6 +187,27 @@ class SpanTableProcessor(BlockProcessor):
             normalized_lines.append(line)
 
         return '\n'.join(normalized_lines)
+
+    def _record_parse_error(self, detail=None):
+        if not self.parse_error_marker:
+            return
+
+        message = str(detail or '').strip()
+        self._parse_errors.append(message or self.parse_error_marker_text)
+
+    def _append_parse_error_marker(self, parent):
+        if not self.parse_error_marker or not self._parse_errors:
+            return
+
+        marker = etree.SubElement(parent, 'p')
+        marker.set('class', 'markdown-table-error')
+        marker.set('data-table-error-count', str(len(self._parse_errors)))
+
+        details = [detail for detail in self._parse_errors if detail]
+        if details:
+            marker.set('title', ' | '.join(details))
+
+        marker.text = self.parse_error_marker_text
 
     def _block_is_table_rows(self, block_text, border, expected_columns=None):
         rows = [row.strip() for row in str(block_text or '').split('\n') if row.strip()]
@@ -298,17 +331,38 @@ class SpanTableProcessor(BlockProcessor):
         list_continuation_active = False
         pending_row_lines = []
 
+        def append_pending_block_text(block_text):
+            nonlocal pending_row_lines
+
+            block_lines = str(block_text or '').strip('\n').split('\n')
+            if not block_lines or not any(line.strip() for line in block_lines):
+                return
+
+            if pending_row_lines and pending_row_lines[-1].strip():
+                pending_row_lines.append('')
+
+            pending_row_lines.extend(block_lines)
+
+            if pending_row_lines and pending_row_lines[-1].strip():
+                pending_row_lines.append('')
+
         def flush_pending_row():
             nonlocal pending_row_lines
             if not pending_row_lines:
                 return
+            self._record_parse_error('Unclosed table row content was normalized with a fallback path.')
             normalized_rows.append('\n'.join(pending_row_lines).strip())
             pending_row_lines = []
 
         for raw_row in rows:
             if isinstance(raw_row, tuple) and len(raw_row) == 2 and raw_row[0] == 'block':
+                if pending_row_lines:
+                    append_pending_block_text(raw_row[1])
+                    list_continuation_active = False
+                    continue
                 flush_pending_row()
-                self._append_block_to_last_row(normalized_rows, raw_row[1], border=border)
+                if not self._append_block_to_last_row(normalized_rows, raw_row[1], border=border):
+                    self._record_parse_error('Dropped detached block continuation while normalizing a table.')
                 list_continuation_active = False
                 continue
 
@@ -418,6 +472,7 @@ class SpanTableProcessor(BlockProcessor):
 
     def run(self, parent, blocks):
         """ Parse a table block and build table. """
+        self._parse_errors = []
         block = blocks.pop(0).split('\n')
         if not block:
             return
@@ -462,6 +517,7 @@ class SpanTableProcessor(BlockProcessor):
             self._build_row(row, tbody, align, border)
 
         self.apply_rowspans(tbody)
+        self._append_parse_error_marker(parent)
 
     def _apply_cell_alignment(self, cell, alignments):
         non_empty_alignments = [a for a in alignments if a]
@@ -545,6 +601,8 @@ class TableExtension(Extension):
     def __init__(self, *args, **kwargs):
         self.config = {
             'allow_blocks_in_table': [False, 'Allow block continuation content inside table cells'],
+            'parse_error_marker': [False, 'Render a marker when table content falls back due to malformed rows'],
+            'parse_error_marker_text': ['TABLE ERROR', 'Marker text to render when table parsing falls back'],
         }
         super().__init__(*args, **kwargs)
 

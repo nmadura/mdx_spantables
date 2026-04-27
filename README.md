@@ -88,6 +88,8 @@ Added support for setting column alignment using the typical ':' :
 Optional setting:
 
 - `allow_blocks_in_table` (default: `False`) folds continuation blocks (lists/paragraphs) into the preceding table cell and parses them as nested block markdown.
+- `parse_error_marker` (default: `False`) appends a marker after the table when the parser has to fall back because a row stayed malformed or continuation content could not be attached cleanly.
+- `parse_error_marker_text` (default: `TABLE ERROR`) overrides the marker text.
 
 Example configuration:
 
@@ -98,6 +100,7 @@ markdown.markdown(
     extension_configs={
         'mdx_spantables': {
             'allow_blocks_in_table': True,
+            'parse_error_marker': True,
         },
     },
 )

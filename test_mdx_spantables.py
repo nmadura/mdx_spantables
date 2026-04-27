@@ -266,6 +266,22 @@ class TestSpanTableProcessor(unittest.TestCase):
         )
         self.assertMultiLineEqual(actual, expected)
 
+    def test_run_single_column_table_with_multiple_rows(self):
+        parent = etree.Element('parent')
+        self.proc.run(parent, [
+            '| head        |\n'
+            '| ----------- |\n'
+            '| content one |\n'
+            '| content two |'
+        ])
+        actual = self.element_to_table(parent)
+        expected = (
+            '1x1\n'
+            '1x1\n'
+            '1x1\n'
+        )
+        self.assertMultiLineEqual(actual, expected)
+
     def test_run_table_with_alignment_and_separator_padding(self):
         parent = etree.Element('parent')
         self.proc.run(parent, [
@@ -392,6 +408,42 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertIn('>Yellow - Excursion limit</td>', html)
         self.assertIn('>Green - Occupant interaction limit</td>', html)
         self.assertIn('>Blue - Vehicle centreline</td>', html)
+
+    def test_blocks_in_single_column_table_render_following_rows(self):
+        html = self.render(
+            '| High severity pulse - 56km/h |\n'
+            '| --- |\n'
+            '| The 56 km/h pulse shall be a 56 km/h Full Width rigid wall test pulse, to be provided by the VM. |\n'
+            '| Where no vehicle specific 56km/h pulse data is available, a generic high severity pulse must be used as defined by ANCAP.\n\n'
+            'Two generic pulses are available and the applicable one for the VUT has to be selected:\n\n'
+            'Pulse 1 - For PHEV and ICE powered vehicles only\n\n'
+            'Pulse 2 - For Battery electric vehicles only. |',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<tr>'), 3)
+        self.assertIn('The 56 km/h pulse shall be a 56 km/h Full Width rigid wall test pulse', html)
+        self.assertIn('Where no vehicle specific 56km/h pulse data is available', html)
+        self.assertIn('Two generic pulses are available and the applicable one for the VUT has to be selected', html)
+        self.assertIn('Pulse 1 - For PHEV and ICE powered vehicles only', html)
+        self.assertIn('Pulse 2 - For Battery electric vehicles only.', html)
+        self.assertRegex(
+            html,
+            r'<td>\s*<p>Where no vehicle specific 56km/h pulse data is available.*?</p>\s*<p>Two generic pulses are available.*?</p>\s*<p>Pulse 1 - For PHEV and ICE powered vehicles only</p>\s*<p>Pulse 2 - For Battery electric vehicles only\.</p>\s*</td>',
+        )
+
+    def test_parse_error_marker_can_be_rendered_for_unclosed_table_rows(self):
+        html = self.render(
+            '| head |\n'
+            '| --- |\n'
+            '| body row\n\n'
+            'still body row',
+            allow_blocks_in_table=True,
+            parse_error_marker=True,
+        )
+
+        self.assertIn('class="markdown-table-error"', html)
+        self.assertIn('TABLE ERROR', html)
 
     def test_blocks_in_table_can_render_list_inside_multiline_first_cell(self):
         html = self.render(
