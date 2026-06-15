@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import markdown
+import re
 import xml.etree.ElementTree as etree
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -489,5 +490,40 @@ class TestSpanTableMarkdownIntegration(unittest.TestCase):
         self.assertIn('<th align="left">Front Occupant</th>', html)
         self.assertIn('<th>Rear child occupants</th>', html)
         self.assertRegex(html, r'</table>\s*<table>')
+
+    def test_blocks_in_table_does_not_merge_fenced_caption_block_into_last_cell(self):
+        html = self.render(
+            '|  | 2026 | 2027 | 2028 | 2029 |\n'
+            '|----|----|----|----|----|\n'
+            '| Stand-alone optional | 50% | 60% | 70% | 80% |\n'
+            '| Percentage of Total Sales | 70% | 80% | 90%  | 100% |\n'
+            '\n'
+            '/// caption | <\n'
+            'AEB Car to Car (C2C)\n'
+            '///\n\n'
+            '|  | 2026 | 2027 | 2028 | 2029 |\n'
+            '|----|----|----|----|----|\n'
+            '| Stand-alone optional | 50% | 60% | 70% | 80% |\n'
+            '| Percentage of Total Sales | 70% | 80% | 90%  | 100% |\n'
+            '\n'
+            '/// caption | <\n'
+            'AEB Vulnerable Road Users (VRU)\n'
+            '///',
+            allow_blocks_in_table=True,
+        )
+
+        self.assertEqual(html.count('<table>'), 2)
+        self.assertIn('<td>100%</td>', html)
+        self.assertRegex(
+            html,
+            r'</table>\s*<p>/// caption \| &lt;\s*AEB Car to Car \(C2C\)\s*///</p>\s*<table>',
+        )
+        self.assertRegex(
+            html,
+            re.compile(
+                r'</table>\s*<p>/// caption \| &lt;\s*AEB Car to Car \(C2C\)\s*///</p>\s*<table>.*?<p>/// caption \| &lt;\s*AEB Vulnerable Road Users \(VRU\)\s*///</p>',
+                re.S,
+            ),
+        )
 
 

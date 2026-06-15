@@ -189,6 +189,12 @@ class SpanTableProcessor(BlockProcessor):
         separator_index = self._find_separator_index(rows, border)
         return separator_index > 0
 
+    def _is_fenced_directive_block(self, block_text):
+        rows = [row for row in str(block_text or '').split('\n') if row.strip()]
+        if len(rows) < 2:
+            return False
+        return rows[0].lstrip().startswith('///') and rows[-1].strip() == '///'
+
     def _split_mixed_block(self, block_text, border, expected_columns=None):
         lines = str(block_text or '').split('\n')
         non_empty_indexes = [index for index, line in enumerate(lines) if line.strip()]
@@ -241,6 +247,9 @@ class SpanTableProcessor(BlockProcessor):
         while blocks:
             next_block = str(blocks[0] or '')
             if self._block_starts_new_table(next_block, border):
+                break
+
+            if self._is_fenced_directive_block(next_block):
                 break
 
             if self._block_is_table_rows(next_block, border, expected_columns=expected_columns):
