@@ -87,7 +87,7 @@ Added support for setting column alignment using the typical ':' :
 
 Optional setting:
 
-- `allow_lists_in_table` (default: `False`) folds list continuation lines into the preceding table cell and parses them as nested block markdown.
+- `allow_blocks_in_table` (default: `False`) folds continuation blocks (lists/paragraphs) into the preceding table cell and parses them as nested block markdown.
 
 Example configuration:
 
@@ -97,13 +97,12 @@ markdown.markdown(
     extensions=['mdx_spantables'],
     extension_configs={
         'mdx_spantables': {
-            'allow_lists_in_table': True,
+            'allow_blocks_in_table': True,
         },
     },
 )
 ```
-
-With that option enabled, content like the following stays in a single table cell instead of turning the list items into separate table rows:
+With that option enabled, content like the following stays in a single table cell instead of turning list items or later paragraphs into separate table rows:
 
     | head 1 | head 2 |
     | :----- | :----- |
